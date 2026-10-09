@@ -82,6 +82,12 @@ ${CLOUD_BADGE_CSS}
 <body class="bg-gradient-to-b from-slate-50 via-slate-50 to-slate-100/60 text-slate-800 min-h-screen flex flex-col font-sans antialiased">
   <div id="app" v-cloak class="flex flex-col min-h-screen">
 
+    <!-- 还不知道是否开启了前台密码（首次访问、无本地记忆）时先盖住页面，
+         等 /api/ui-config 返回再决定显示登录门还是主页，避免先闪出主页 -->
+    <div v-if="!authResolved" class="fixed inset-0 z-[60] flex items-center justify-center bg-slate-50">
+      <i class="fa-solid fa-circle-notch fa-spin text-2xl text-slate-300"></i>
+    </div>
+
     <!-- ============ 前台访问密码（V1.3） ============
          后台开启「前台访问密码」后，访客必须先解锁才能搜索。
          首页 HTML 与 /api/ui-config 保持公开，所以这一层是前端渲染的登录门，
@@ -488,15 +494,27 @@ ${CLOUD_BADGE_CSS}
            令牌由服务端下发、存在本地，之后所有数据接口都带 X-Frontend-Token。
            它由密码哈希派生，所以后台一改密码，这边的旧令牌就会自动 401 并被清掉。 */
         const FE_TOKEN_KEY = 'pansou_fe_token';
-        const locked = ref(false);
+        // 记住上次看到的「是否开启前台密码」（'1' / '0'），再次访问时首帧即可直接定态
+        const FE_AUTH_HINT_KEY = 'pansou_fe_auth';
+        // 隐私模式 / 禁用存储时 localStorage 会直接抛错，这里必须兜住
+        let savedFeToken = '';
+        let savedAuthHint = '';
+        try {
+          savedFeToken = localStorage.getItem(FE_TOKEN_KEY) || '';
+          savedAuthHint = localStorage.getItem(FE_AUTH_HINT_KEY) || '';
+        } catch (e) {}
+        const feToken = ref(savedFeToken);
+        const saveAuthHint = (enabled) => {
+          try { localStorage.setItem(FE_AUTH_HINT_KEY, enabled ? '1' : '0'); } catch (e) {}
+        };
+        // 首帧状态：有记忆按记忆来；有本地令牌说明能直接进主页；
+        // 两者都没有（首次访问）就先挂起，等 /api/ui-config 返回再定
+        const authResolved = ref(savedAuthHint !== '' || !!savedFeToken);
+        const locked = ref(savedAuthHint === '1' && !savedFeToken);
         const unlockInput = ref('');
         const unlockError = ref('');
         const unlocking = ref(false);
         const showUnlockPwd = ref(false);
-        // 隐私模式 / 禁用存储时 localStorage 会直接抛错，这里必须兜住
-        let savedFeToken = '';
-        try { savedFeToken = localStorage.getItem(FE_TOKEN_KEY) || ''; } catch (e) {}
-        const feToken = ref(savedFeToken);
 
         const hotSearches = ref(['热辣滚烫', '周处除三害', '沙丘2', '繁花', '三体', '庆余年', '黑神话悟空', '流浪地球2']);
         const mergedResults = ref({});
@@ -542,6 +560,7 @@ ${CLOUD_BADGE_CSS}
           if (res.status === 401) {
             feToken.value = '';
             try { localStorage.removeItem(FE_TOKEN_KEY); } catch (e) {}
+            saveAuthHint(true);
             locked.value = true;
           }
           return res;
@@ -922,8 +941,12 @@ ${CLOUD_BADGE_CSS}
               } else {
                 locked.value = false;
               }
+              saveAuthHint(!!cfg.frontend_auth_enabled);
             }
           } catch (e) {}
+          // 无论成败都要解除挂起：拿不到配置时按未开启处理，
+          // 若实际开启了，数据接口会 401，再由 apiFetch 退回登录门
+          authResolved.value = true;
 
           try {
             const res = await fetch('/api/hot');
@@ -990,6 +1013,7 @@ ${CLOUD_BADGE_CSS}
           resetToHome,
           // V1.3：前台访问密码
           locked,
+          authResolved,
           unlockInput,
           unlockError,
           unlocking,
