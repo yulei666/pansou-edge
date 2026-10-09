@@ -585,6 +585,10 @@ ${CLOUD_BADGE_CSS}
               }
               unlockInput.value = '';
               locked.value = false;
+              if (resumeSearchAfterUnlock) {
+                resumeSearchAfterUnlock = false;
+                doSearch();
+              }
             } else {
               unlockError.value = d.message || '密码错误，请重新输入';
             }
@@ -764,6 +768,8 @@ ${CLOUD_BADGE_CSS}
         const SHARD_CONCURRENCY = 4;
         let cachedChannelsInfo = null;
         let cachedPluginsInfo = null;
+        // 搜索途中令牌失效被退回登录门时置位，解锁后自动重搜一次
+        let resumeSearchAfterUnlock = false;
 
         const doSearch = async () => {
           const kw = keyword.value.trim();
@@ -807,14 +813,20 @@ ${CLOUD_BADGE_CSS}
           };
 
           try {
+            // 只缓存成功的响应：401 的错误体若被缓存，解锁后频道/插件都是空的，
+            // 搜索一个请求都不会发出，只能刷新页面才能恢复
             if (!cachedChannelsInfo) {
               const chRes = await apiFetch('/api/channels');
-              cachedChannelsInfo = await chRes.json();
+              if (chRes.status === 401) return;
+              const info = await chRes.json();
+              if (chRes.ok) cachedChannelsInfo = info;
             }
             if (!cachedPluginsInfo) {
               try {
                 const plRes = await apiFetch('/api/plugins');
-                cachedPluginsInfo = await plRes.json();
+                if (plRes.status === 401) return;
+                const info = await plRes.json();
+                if (plRes.ok) cachedPluginsInfo = info;
               } catch (e) {
                 cachedPluginsInfo = { plugins: [] };
               }
@@ -900,8 +912,16 @@ ${CLOUD_BADGE_CSS}
             alert('搜索请求失败，请检查网络连接');
           } finally {
             loading.value = false;
-            // 自动测活（默认开启）：结果落盘后立刻开始检测
-            if (autoCheck.value) runAutoCheck();
+            if (locked.value) {
+              // 途中令牌失效（apiFetch 已退回登录门）：这次结果不完整，解锁后重搜
+              resumeSearchAfterUnlock = true;
+              searched.value = false;
+              mergedResults.value = {};
+              totalCount.value = 0;
+            } else if (autoCheck.value) {
+              // 自动测活（默认开启）：结果落盘后立刻开始检测
+              runAutoCheck();
+            }
           }
         };
 
