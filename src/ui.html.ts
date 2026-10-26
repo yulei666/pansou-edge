@@ -11,6 +11,7 @@ export const HTML_TEMPLATE = `<!DOCTYPE html>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>${APP_NAME} · 极速网盘搜索聚合 ${APP_VERSION_LABEL}</title>
   <meta name="application-name" content="${APP_NAME}">
+  <meta name="robots" content="noindex, nofollow">
   <meta name="description" content="极速全网盘资源聚合搜索，支持阿里、夸克、百度、115、123、迅雷等 15+ 类网盘，内置链接失效检测。">
   <meta name="theme-color" content="#2563eb">
   <meta name="mobile-web-app-capable" content="yes">

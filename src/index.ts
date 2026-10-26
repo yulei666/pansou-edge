@@ -181,6 +181,16 @@ export default {
       });
     }
 
+    // 禁止搜索引擎抓取整站
+    if (path === '/robots.txt') {
+      return new Response('User-agent: *\nDisallow: /\n', {
+        headers: {
+          'Content-Type': 'text/plain; charset=utf-8',
+          'Cache-Control': 'public, max-age=3600'
+        }
+      });
+    }
+
     if (path === '/manifest.webmanifest' || path === '/manifest.json') {
       return new Response(buildManifest(url.origin), {
         headers: {
@@ -219,7 +229,8 @@ export default {
       return new Response(HTML_TEMPLATE, {
         headers: {
           'Content-Type': 'text/html; charset=utf-8',
-          'Cache-Control': 'no-cache, no-store, must-revalidate'
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'X-Robots-Tag': 'noindex, nofollow'
         }
       });
     }
